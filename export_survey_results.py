@@ -90,15 +90,22 @@ def count_answers(series: pd.Series) -> pd.Series:
     return split_answers.value_counts().sort_values(ascending=False)
 
 
-def create_bar_chart(question: str, counts: pd.Series, pdf: PdfPages) -> None:
+def create_bar_chart(
+    question: str,
+    counts: pd.Series,
+    pdf: PdfPages,
+    answered_count: int,
+    total_count: int,    
+    ) -> None:
     """
     Create a horizontal bar chart and save it as one page in the PDF.
     Long questions and answer options are wrapped for consistent formatting.
     """
     wrapped_question = wrap_text(question, width=70)
+    response_summary = f"({answered_count}/{total_count} answered)"
 
     wrapped_labels = [
-        wrap_text(label, width=40)
+        wrap_text(label, width=30)
         for label in counts.index
     ]
 
@@ -111,14 +118,25 @@ def create_bar_chart(question: str, counts: pd.Series, pdf: PdfPages) -> None:
     ax.barh(wrapped_labels, counts.values, color=colors)
     ax.invert_yaxis()
 
-    ax.set_title(wrapped_question, fontsize=13, pad=16)
+    ax.set_title(
+        f"{wrapped_question}\n{response_summary}",
+        fontsize=13,
+        pad=16,
+    )
     ax.set_xlabel("Number of responses")
     ax.set_ylabel("Answer")
 
     for i, value in enumerate(counts.values):
         ax.text(value, i, f" {value}", va="center")
 
-    plt.tight_layout()
+    # plt.tight_layout()
+    fig.subplots_adjust(
+        left=0.27,  # fixed label area
+        right=0.95,
+        top=0.75,
+        bottom=0.14,
+    )
+
     pdf.savefig(fig)
     plt.close(fig)
 
@@ -141,13 +159,32 @@ def export_survey_charts_to_pdf(
         raise ValueError("No survey question columns were found.")
 
     with PdfPages(output_pdf_path) as pdf:
+        total_count = len(df)
+
         for question in question_columns:
-            counts = count_answers(df[question])
+            series = df[question]
+
+            answered_count = (
+                series
+                .dropna()
+                .astype(str)
+                .str.strip()
+                .ne("")
+                .sum()
+            )
+
+            counts = count_answers(series)
 
             if counts.empty:
                 continue
 
-            create_bar_chart(question, counts, pdf)
+            create_bar_chart(
+                question=question,
+                counts=counts,
+                pdf=pdf,
+                answered_count=answered_count,
+                total_count=total_count,
+            )
 
     print(f"Saved PDF to: {output_pdf_path}")
 
